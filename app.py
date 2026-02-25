@@ -10,35 +10,31 @@ from urllib.parse import urlencode
 from urllib.request import Request, build_opener, HTTPCookieProcessor, HTTPSHandler
 from urllib.error import HTTPError, URLError
 
-# =========================
-# Config (env vars)
-# =========================
-BASE = os.getenv("PEP_BASE", "https://192.168.50.1").rstrip("/")   # use https if router forces it
+
+BASE = os.getenv("PEP_BASE", "https://192.168.50.1").rstrip("/")
 USERNAME = os.getenv("PEP_USER", "admin")
 PASSWORD = os.getenv("PEP_PASS", "").strip()
 
-# OAuth client/token (optional but supported)
 CLIENT_NAME = os.getenv("PEP_CLIENT_NAME", "gps-client")
-SCOPE = os.getenv("PEP_SCOPE", "api")  # <-- set this to "full api" scope your firmware expects
+SCOPE = os.getenv("PEP_SCOPE", "api")
 CLIENT_ID = os.getenv("PEP_CLIENT_ID", "").strip()
 CLIENT_SECRET = os.getenv("PEP_CLIENT_SECRET", "").strip()
 
 TIMEOUT = float(os.getenv("PEP_TIMEOUT", "8"))
 
 POLL_SEC = float(os.getenv("PEP_POLL", "10"))
-STOP_THRESHOLD = float(os.getenv("PEP_STOP_THRESHOLD", "0.2"))  # "close to zero"
-MOVE_THRESHOLD = float(os.getenv("PEP_MOVE_THRESHOLD", "1.0"))  # moving
+STOP_THRESHOLD = float(os.getenv("PEP_STOP_THRESHOLD", "1.0"))
+MOVE_THRESHOLD = float(os.getenv("PEP_MOVE_THRESHOLD", "1.0"))
 STOP_SAMPLES = int(os.getenv("PEP_STOP_SAMPLES", "5"))
 MOVE_SAMPLES = int(os.getenv("PEP_MOVE_SAMPLES", "3"))
 
-# If your API endpoints are different, change these:
+
 PATH_LOGIN = "/api/login"
 PATH_INFO = "/api/info.location"
 PATH_AUTH_CLIENT = "/api/auth.client"
 PATH_TOKEN_GRANT = "/api/auth.token.grant"
 PATH_CMD_AP = "/api/cmd.ap"
 
-# Router cert often doesn't match IP; ignore verification for LAN usage.
 CTX = ssl._create_unverified_context()
 
 
@@ -138,7 +134,6 @@ def extract_token(resp: dict) -> str:
 
 
 def get_speed_from_info(info_resp: dict) -> float | None:
-    # expected: { gps: bool, location: { latitude, longitude, speed } }
     loc = info_resp.get("location") if isinstance(info_resp.get("location"), dict) else None
     if not isinstance(loc, dict):
         return None
@@ -155,18 +150,15 @@ def main():
 
     api = PeplinkAPI(BASE)
 
-    # 1) login (cookie session)
     expect_ok(api.post_json(PATH_LOGIN, {"username": USERNAME, "password": PASSWORD}), "login")
     print("login ok", flush=True)
 
-    # 2/3) token (optional but supported)
     token = ""
     cid = CLIENT_ID
     csec = CLIENT_SECRET
 
     if not (cid and csec):
-        # Create client only if creds not provided.
-        # Note: if firmware doesn't dedupe by name, this can create many clients across restarts.
+
         client_resp = expect_ok(
             api.post_json(PATH_AUTH_CLIENT, {"action": "add", "name": CLIENT_NAME, "scope": SCOPE}),
             "auth.client",
@@ -181,8 +173,6 @@ def main():
     token = extract_token(grant_resp)
     print("token granted", flush=True)
 
-    # AP control helper: prefer cookie session (matches your curl -b cookies.txt).
-    # If cmd.ap requires token on your firmware, fallback with accessToken.
     def set_ap(enable: bool):
         body = {"enable": bool(enable)}
         try:
@@ -194,13 +184,11 @@ def main():
         except Exception:
             pass
 
-        # fallback: token as query param
         r = api.post_json(PATH_CMD_AP, body, query={"accessToken": token})
         expect_ok(r, "cmd.ap(token)")
         return True
 
-    # State machine
-    last_ap_state: bool | None = None  # unknown at start
+    last_ap_state: bool | None = None
     speeds = deque(maxlen=max(STOP_SAMPLES, MOVE_SAMPLES))
 
     print(
@@ -218,18 +206,16 @@ def main():
     )
 
     while True:
-        # GPS read uses token (but cookie session would also likely work)
         info_payload = api.get_json(PATH_INFO, query={"accessToken": token})
         info_resp = expect_ok(info_payload, "info.location")
         spd = get_speed_from_info(info_resp)
 
         speeds.append(spd if spd is not None else float("nan"))
 
-        # Determine conditions only if we have enough real samples
         recent = list(speeds)
 
         def is_number(x: float) -> bool:
-            return x == x  # NaN check
+            return x == x
 
         stop_window = [x for x in recent[-STOP_SAMPLES:] if is_number(x)] if len(recent) >= STOP_SAMPLES else []
         move_window = [x for x in recent[-MOVE_SAMPLES:] if is_number(x)] if len(recent) >= MOVE_SAMPLES else []
@@ -241,7 +227,6 @@ def main():
             len(move_window) == MOVE_SAMPLES and all(x >= MOVE_THRESHOLD for x in move_window)
         )
 
-        # Decision + action
         action = None
         if should_disable and (last_ap_state is None or last_ap_state is True):
             set_ap(False)
@@ -252,7 +237,6 @@ def main():
             last_ap_state = True
             action = "ap_enable"
 
-        # Log line
         out = {
             "ts": time.time(),
             "speed": spd,
