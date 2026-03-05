@@ -9,6 +9,6 @@ docker buildx build   --platform linux/amd64,linux/arm64,linux/arm/v7   -t audri
 ------------------------------------------------------------------------
 
 link to docker repo:
-https://hub.docker.com/repository/docker/audxiusgithub/peplinkwifitogglev2/general
+https://hub.docker.com/repository/docker/audriuspeplink/peplinkgpswifishutdown/general
 
 ------------------------------------------------------------------------
