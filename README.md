@@ -1,4 +1,6 @@
-# PeplinkWifiToggle
+# [OUTDATED] PeplinkWifiToggle
+#### Please go to https://github.com/Audxius/Peplink-Wifi-Toggle-V2 for an updated version
+------------------------------------------------------------------------
 Wifi toggle based on speed for PEPLINK routers (docker)
 
 ------------------------------------------------------------------------
